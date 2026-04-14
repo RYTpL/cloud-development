@@ -8,8 +8,9 @@ namespace GenerationService.Messaging;
 public class SnsPublisher
 {
     private readonly IAmazonSimpleNotificationService _sns;
-    private readonly string _topicArn;
+    private readonly string _topicName;
     private readonly ILogger<SnsPublisher> _logger;
+    private string? _topicArn;
 
     public SnsPublisher(
         IAmazonSimpleNotificationService sns,
@@ -17,27 +18,39 @@ public class SnsPublisher
         ILogger<SnsPublisher> logger)
     {
         _sns = sns;
-        _topicArn = configuration["Sns__TopicArn"] ?? string.Empty;
+        _topicName = configuration["Sns__TopicName"] ?? "contracts-topic";
         _logger = logger;
+    }
+
+    // Получаем ARN топика по имени (создаём если не существует)
+    private async Task<string> GetTopicArnAsync()
+    {
+        if (_topicArn is not null) return _topicArn;
+
+        var response = await _sns.CreateTopicAsync(_topicName);
+        _topicArn = response.TopicArn;
+        _logger.LogInformation("SNS топик ARN: {TopicArn}", _topicArn);
+        return _topicArn;
     }
 
     public async Task PublishAsync(SoftwareProjectContract contract)
     {
-        if (string.IsNullOrEmpty(_topicArn))
+        try
         {
-            _logger.LogWarning("SNS TopicArn не настроен — пропускаем публикацию");
-            return;
+            var topicArn = await GetTopicArnAsync();
+            var message = JsonSerializer.Serialize(contract);
+
+            await _sns.PublishAsync(new PublishRequest
+            {
+                TopicArn = topicArn,
+                Message = message
+            });
+
+            _logger.LogInformation("Контракт {Id} опубликован в SNS", contract.Id);
         }
-
-        var message = JsonSerializer.Serialize(contract);
-
-        var request = new PublishRequest
+        catch (Exception ex)
         {
-            TopicArn = _topicArn,
-            Message = message
-        };
-
-        await _sns.PublishAsync(request);
-        _logger.LogInformation("Контракт {Id} опубликован в SNS", contract.Id);
+            _logger.LogError(ex, "Ошибка публикации в SNS");
+        }
     }
 }

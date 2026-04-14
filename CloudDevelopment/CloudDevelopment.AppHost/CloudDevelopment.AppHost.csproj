@@ -14,6 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
+	 <ProjectReference Include="..\..\FileService\FileService.csproj" />
     <ProjectReference Include="..\..\ApiGateway\ApiGateway.csproj" />
     <ProjectReference Include="..\..\FileService\FileService.csproj" />
     <ProjectReference Include="..\..\GenerationService\GenerationService.csproj" />
