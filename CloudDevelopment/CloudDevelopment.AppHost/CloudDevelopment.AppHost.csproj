@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.AWS" Version="13.0.0" />
     <PackageReference Include="Aspire.Hosting.Redis" Version="13.2.2" />
   </ItemGroup>
 
