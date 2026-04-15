@@ -1,4 +1,9 @@
 using System.Text.Json;
+using Amazon;
+using Amazon.Extensions.NETCore.Setup;
+using Amazon.Runtime;
+using Amazon.SimpleNotificationService;
+using GenerationService.Messaging;
 using GenerationService.Models;
 using GenerationService.Services;
 using Microsoft.Extensions.Caching.Distributed;
@@ -7,24 +12,30 @@ using Serilog.Formatting.Compact;
 
 var builder = WebApplication.CreateBuilder(args);
 
-
 builder.AddServiceDefaults();
 
-
-// 2. Настраиваем Serilog — структурное логирование
+// Serilog
 builder.Host.UseSerilog((context, configuration) =>
     configuration
         .ReadFrom.Configuration(context.Configuration)
-        .WriteTo.Console(new CompactJsonFormatter())); // JSON формат в консоль
+        .WriteTo.Console(new CompactJsonFormatter()));
 
-
-// 3. Подключаем Redis для кэширования
+// Redis
 builder.AddRedisDistributedCache("redis");
 
+// AWS SNS через LocalStack
+var localStackUrl = builder.Configuration["LocalStack__ServiceUrl"] ?? "http://localhost:4566";
+builder.Services.AddSingleton<IAmazonSimpleNotificationService>(_ =>
+    new AmazonSimpleNotificationServiceClient(
+        new BasicAWSCredentials("test", "test"),
+        new AmazonSimpleNotificationServiceConfig
+        {
+            ServiceURL = localStackUrl,
+            AuthenticationRegion = "us-east-1"
+        }));
 
-// 4. Регистрируем наш генератор как сервис
+builder.Services.AddSingleton<SnsPublisher>();
 builder.Services.AddSingleton<ContractGeneratorService>();
-
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -34,17 +45,15 @@ var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI();
 
-
-// 5. Эндпоинт GET /contracts/{id}
+// Эндпоинт GET /contracts/{id} — с кэшированием
 app.MapGet("/contracts/{id}", async (
-    string id,                          
-    IDistributedCache cache,            
-    ContractGeneratorService generator, 
-    ILogger<Program> logger) =>         
+    string id,
+    IDistributedCache cache,
+    ContractGeneratorService generator,
+    SnsPublisher sns,
+    ILogger<Program> logger) =>
 {
-    var cacheKey = $"contract:{id}"; 
-
-    // Пробуем достать из кэша
+    var cacheKey = $"contract:{id}";
     var cached = await cache.GetStringAsync(cacheKey);
 
     if (cached is not null)
@@ -54,28 +63,33 @@ app.MapGet("/contracts/{id}", async (
         return Results.Ok(cachedContract);
     }
 
-    
-    logger.LogInformation("Cache MISS для ключа {CacheKey}. Генерация нового контракта...", cacheKey);
+    logger.LogInformation("Cache MISS для ключа {CacheKey}. Генерация...", cacheKey);
     var contract = generator.Generate();
 
-    
     var options = new DistributedCacheEntryOptions
     {
         AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
     };
     await cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(contract), options);
 
+    // Публикуем в SNS
+    await sns.PublishAsync(contract);
+
     logger.LogInformation("Контракт {ContractId} сохранён в кэш", contract.Id);
     return Results.Ok(contract);
 });
 
-
-app.MapGet("/contracts", (
+// Эндпоинт GET /contracts — без кэша
+app.MapGet("/contracts", async (
     ContractGeneratorService generator,
+    SnsPublisher sns,
     ILogger<Program> logger) =>
 {
-    logger.LogInformation("Генерация нового контракта по запросу");
+    logger.LogInformation("Генерация нового контракта");
     var contract = generator.Generate();
+
+    await sns.PublishAsync(contract);
+
     return Results.Ok(contract);
 });
 
