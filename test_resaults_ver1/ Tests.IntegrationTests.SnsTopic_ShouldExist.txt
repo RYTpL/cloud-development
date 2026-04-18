@@ -1,0 +1,39 @@
+ Tests.IntegrationTests.SnsTopic_ShouldExist
+   Источник: IntegrationTests.cs строка 189
+   Длительность: 1 мс
+
+  Сообщение: 
+System.TimeoutException : The operation was canceled.
+---- System.Threading.Tasks.TaskCanceledException : The operation was canceled.
+-------- System.IO.IOException : Unable to read data from the transport connection: Операция ввода/вывода была прервана из-за завершения потока команд или по запросу приложения..
+------------ System.Net.Sockets.SocketException : Операция ввода/вывода была прервана из-за завершения потока команд или по запросу приложения.
+
+  Трассировка стека: 
+HttpWebRequestMessage.GetResponseAsync(CancellationToken cancellationToken)
+HttpHandler`1.InvokeAsync[T](IExecutionContext executionContext)
+Unmarshaller.InvokeAsync[T](IExecutionContext executionContext)
+ErrorHandler.InvokeAsync[T](IExecutionContext executionContext)
+ErrorHandler.InvokeAsync[T](IExecutionContext executionContext)
+CallbackHandler.InvokeAsync[T](IExecutionContext executionContext)
+Signer.InvokeAsync[T](IExecutionContext executionContext)
+EndpointDiscoveryHandler.InvokeAsync[T](IExecutionContext executionContext)
+EndpointDiscoveryHandler.InvokeAsync[T](IExecutionContext executionContext)
+RetryHandler.InvokeAsync[T](IExecutionContext executionContext)
+RetryHandler.InvokeAsync[T](IExecutionContext executionContext)
+CallbackHandler.InvokeAsync[T](IExecutionContext executionContext)
+BaseAuthResolverHandler.InvokeAsync[T](IExecutionContext executionContext)
+CallbackHandler.InvokeAsync[T](IExecutionContext executionContext)
+ErrorCallbackHandler.InvokeAsync[T](IExecutionContext executionContext)
+MetricsHandler.InvokeAsync[T](IExecutionContext executionContext)
+IntegrationTests.InitializeAsync() строка 47
+----- Inner Stack Trace -----
+HttpConnection.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+----- Inner Stack Trace -----
+AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+Int32>.GetResult(Int16 token)
+HttpConnection.InitialFillAsync(Boolean async)
+HttpConnection.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+----- Inner Stack Trace -----
