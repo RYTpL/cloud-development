@@ -1,7 +1,8 @@
+using GenerationService.Models;
+using GenerationService.Options;
 using GenerationService.Services;
 using Serilog;
 using Serilog.Formatting.Compact;
-using GenerationService.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,6 +15,9 @@ builder.Host.UseSerilog((context, configuration) =>
 
 builder.AddRedisDistributedCache("redis");
 
+// Регистрируем SNS Publisher
+builder.Services.AddSingleton<SnsPublisher>();
+
 builder.Services.AddSingleton<ContractGeneratorService>();
 builder.Services.AddSingleton<ContractCacheService>();
 
@@ -22,8 +26,8 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowClient", policy =>
     {
         policy.WithOrigins(
-                "https://localhost:7282",
-                "http://localhost:5219")
+            "https://localhost:7282",
+            "http://localhost:5219")
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
@@ -41,7 +45,6 @@ app.UseCors("AllowClient");
 app.UseSwagger();
 app.UseSwaggerUI();
 
-
 app.MapGet("/contracts/{id:int}", async (
     int id,
     ContractCacheService cacheService,
@@ -56,9 +59,31 @@ app.MapGet("/contracts/{id:int}", async (
     return Results.Ok(contract);
 });
 
-app.MapGet("/contracts", (ContractGeneratorService generator) =>
+app.MapGet("/contracts", (
+    ContractGeneratorService generator,
+    SnsPublisher snsPublisher,
+    ILogger<Program> logger) =>
 {
-    var contract = generator.Generate(Random.Shared.Next(1, 100000));
+    var count = Random.Shared.Next(1, 100000);
+    var contract = generator.Generate(count);
+
+    logger.LogInformation(
+        "Generated {Count} contracts on instance {InstanceId}",
+        count, instanceId);
+
+    // Отправляем в SNS (fire-and-forget, не блокируем ответ)
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            await snsPublisher.PublishContractsAsync(new List<SoftwareProjectContract> { contract });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to publish to SNS");
+        }
+    });
+
     return Results.Ok(contract);
 });
 
