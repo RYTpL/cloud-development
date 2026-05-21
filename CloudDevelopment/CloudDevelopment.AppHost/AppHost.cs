@@ -26,6 +26,9 @@ builder.AddProject<Projects.Client_Wasm>("client-wasm")
     .WithReference(generation1)
     .WaitFor(generation1);
 
+var fileService = builder
+    .AddProject<Projects.FileService>("file-service");
+
 builder.Build().Run();
 
 

@@ -1,42 +1,48 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-	<PropertyGroup>
-		<TargetFramework>net8.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
-		<IsPackable>false</IsPackable>
-		<IsTestProject>true</IsTestProject>
-	</PropertyGroup>
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- xUnit -->
+    <PackageReference Include="xunit" Version="2.9.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+
+    <!-- Aspire Testing -->
+    <PackageReference Include="Aspire.Hosting.Testing" Version="9.5.2" />
+
+    <!-- Testcontainers: Redis + LocalStack (S3 + SNS) -->
+    <PackageReference Include="Testcontainers.Redis" Version="3.10.0" />
+    <PackageReference Include="Testcontainers.LocalStack" Version="3.10.0" />
+
+    <!-- AWS SDK для S3 и SNS/SQS -->
+    <PackageReference Include="AWSSDK.S3" Version="3.7.413.4" />
+    <PackageReference Include="AWSSDK.SimpleNotificationService" Version="3.7.401.13" />
+    <PackageReference Include="AWSSDK.SQS" Version="3.7.400.61" />
+
+    <!-- HTTP + WebApplicationFactory -->
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.25" />
+
+    <!-- FluentAssertions -->
+    <PackageReference Include="FluentAssertions" Version="6.12.2" />
 
 
-	<ItemGroup>
-		<!-- xUnit -->
-		<PackageReference Include="xunit" Version="2.9.0" />
-		<PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
-			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-			<PrivateAssets>all</PrivateAssets>
-		</PackageReference>
-		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+  </ItemGroup>
 
-		<!-- Aspire Testing -->
-		<PackageReference Include="Aspire.Hosting.Testing" Version="9.5.2" />
-
-		<!-- Testcontainers для Redis (изолированный Redis без Aspire) -->
-		<PackageReference Include="Testcontainers.Redis" Version="3.10.0" />
-
-		<!-- HTTP + JSON -->
-		<PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.25" />
-
-		<!-- FluentAssertions для читаемых assertions -->
-		<PackageReference Include="FluentAssertions" Version="6.12.2" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<!-- Ссылки на проекты решения -->
-		<ProjectReference Include="..\CloudDevelopment\CloudDevelopment.AppHost\CloudDevelopment.AppHost.csproj" />
-		<ProjectReference Include="..\GenerationService\GenerationService.csproj" />
-		<ProjectReference Include="..\ApiGateway\ApiGateway.csproj" />
-	</ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GenerationService\GenerationService.csproj" Aliases="GenerationServiceAssembly" />
+    <ProjectReference Include="..\ApiGateway\ApiGateway.csproj" />
+    <ProjectReference Include="..\FileService\FileService.csproj" Aliases="FileServiceAssembly" />
+    <ProjectReference Include="..\CloudDevelopment\CloudDevelopment.AppHost\CloudDevelopment.AppHost.csproj" />
+  </ItemGroup>
 
 </Project>
-

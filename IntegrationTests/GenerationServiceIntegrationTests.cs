@@ -1,7 +1,8 @@
+extern alias GenerationServiceAssembly;
+
 using System.Net;
 using System.Text.Json;
 using FluentAssertions;
-using IntegrationTests.Models;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Caching.Distributed;
@@ -11,12 +12,16 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Testcontainers.Redis;
 using Xunit;
+using GenerationProgram = GenerationServiceAssembly::Program;
 
 namespace IntegrationTests;
 
 /// <summary>
 /// Интеграционные тесты HTTP-эндпоинтов GenerationService.
-/// Поднимают реальный экземпляр сервиса с настоящим Redis в Docker.
+/// Поднимают реальный экземпляр сервиса через WebApplicationFactory с Redis в Docker.
+///
+/// Требование: в проект GenerationService добавить файл ProgramAccessor.cs:
+///   public partial class Program { }
 /// </summary>
 public class GenerationServiceIntegrationTests : IAsyncLifetime
 {
@@ -24,10 +29,10 @@ public class GenerationServiceIntegrationTests : IAsyncLifetime
         .WithImage("redis:7-alpine")
         .Build();
 
-    private WebApplicationFactory<Program> _factory = null!;
+    private WebApplicationFactory<GenerationProgram> _factory = null!;
     private HttpClient _client = null!;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private static readonly JsonSerializerOptions _jsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
@@ -36,15 +41,17 @@ public class GenerationServiceIntegrationTests : IAsyncLifetime
     {
         await _redisContainer.StartAsync();
 
-        _factory = new WebApplicationFactory<Program>()
+        _factory = new WebApplicationFactory<GenerationProgram>()
             .WithWebHostBuilder(host =>
             {
                 host.UseEnvironment("Test");
 
                 host.ConfigureServices(services =>
                 {
-                    // Заменяем зарегистрированный IDistributedCache на тестовый Redis
+                    // Подменяем IDistributedCache на тестовый Redis-контейнер
                     services.RemoveAll<IDistributedCache>();
+                    services.RemoveAll<IOptions<RedisCacheOptions>>();
+
                     services.AddStackExchangeRedisCache(options =>
                     {
                         options.Configuration = _redisContainer.GetConnectionString();
@@ -62,20 +69,17 @@ public class GenerationServiceIntegrationTests : IAsyncLifetime
         await _redisContainer.StopAsync();
     }
 
-    // ────────────────────────── GET /contracts ──────────────────────────
+    // ────────────────── GET /contracts ──────────────────
 
     [Fact]
     public async Task GetContracts_ShouldReturn200WithValidContract()
     {
-        // Act
         var response = await _client.GetAsync("/contracts");
 
-        // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var contract = await DeserializeContract(response);
-        contract.Should().NotBeNull();
-        contract!.ProjectName.Should().NotBeNullOrWhiteSpace();
+        var contract = await DeserializeContractAsync(response);
+        contract.ProjectName.Should().NotBeNullOrWhiteSpace();
         contract.ClientCompany.Should().NotBeNullOrWhiteSpace();
         contract.Budget.Should().BeGreaterThan(0);
     }
@@ -83,55 +87,37 @@ public class GenerationServiceIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task GetContracts_MultipleCalls_ShouldReturnDifferentContracts()
     {
-        // Act — два независимых запроса
-        var response1 = await _client.GetAsync("/contracts");
-        var response2 = await _client.GetAsync("/contracts");
+        var c1 = await DeserializeContractAsync(await _client.GetAsync("/contracts"));
+        var c2 = await DeserializeContractAsync(await _client.GetAsync("/contracts"));
 
-        var contract1 = await DeserializeContract(response1);
-        var contract2 = await DeserializeContract(response2);
-
-        // Assert — id генерируется рандомно, вероятность совпадения мала
-        // Хотя бы одно поле должно отличаться (бюджет, дата, название)
-        var areIdentical = contract1!.Id == contract2!.Id
-                           && contract1.Budget == contract2.Budget
-                           && contract1.StartDate == contract2.StartDate;
-
-        areIdentical.Should().BeFalse(
-            "два независимых запроса не должны возвращать полностью идентичные контракты");
+        // id генерируется через Random.Shared.Next(1, 100000) — крайне маловероятно совпадение
+        var identical = c1.Id == c2.Id && c1.Budget == c2.Budget && c1.StartDate == c2.StartDate;
+        identical.Should().BeFalse("два независимых запроса не должны вернуть одинаковый контракт");
     }
 
-    // ────────────────────────── GET /contracts/{id} ──────────────────────────
+    // ────────────────── GET /contracts/{id} ──────────────────
 
     [Fact]
     public async Task GetContractById_ShouldReturn200WithCorrectId()
     {
-        // Arrange
-        const int id = 5;
+        var response = await _client.GetAsync("/contracts/5");
 
-        // Act
-        var response = await _client.GetAsync($"/contracts/{id}");
-
-        // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var contract = await DeserializeContract(response);
-        contract!.Id.Should().Be(id);
+        var contract = await DeserializeContractAsync(response);
+        contract.Id.Should().Be(5);
     }
 
     [Fact]
     public async Task GetContractById_TwiceSameId_ShouldReturnCachedResult()
     {
-        // Arrange
         const int id = 999;
 
-        // Act — первый запрос (генерация + кэш)
-        var first = await DeserializeContract(await _client.GetAsync($"/contracts/{id}"));
+        var first = await DeserializeContractAsync(await _client.GetAsync($"/contracts/{id}"));
+        var second = await DeserializeContractAsync(await _client.GetAsync($"/contracts/{id}"));
 
-        // Act — второй запрос (из кэша)
-        var second = await DeserializeContract(await _client.GetAsync($"/contracts/{id}"));
-
-        // Assert — оба ответа должны совпадать (кэш работает)
-        second!.Id.Should().Be(first!.Id);
+        // Если кэш работает — оба ответа идентичны
+        second.Id.Should().Be(first.Id);
         second.ProjectName.Should().Be(first.ProjectName);
         second.Budget.Should().Be(first.Budget);
         second.ClientCompany.Should().Be(first.ClientCompany);
@@ -139,27 +125,22 @@ public class GenerationServiceIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task GetContractById_DifferentIds_ShouldReturnDifferentContracts()
+    public async Task GetContractById_DifferentIds_ShouldHaveDifferentIds()
     {
-        // Act
-        var contract10 = await DeserializeContract(await _client.GetAsync("/contracts/10"));
-        var contract20 = await DeserializeContract(await _client.GetAsync("/contracts/20"));
+        var c10 = await DeserializeContractAsync(await _client.GetAsync("/contracts/10"));
+        var c20 = await DeserializeContractAsync(await _client.GetAsync("/contracts/20"));
 
-        // Assert
-        contract10!.Id.Should().Be(10);
-        contract20!.Id.Should().Be(20);
-        contract10.Id.Should().NotBe(contract20.Id);
+        c10.Id.Should().Be(10);
+        c20.Id.Should().Be(20);
+        c10.Id.Should().NotBe(c20.Id);
     }
 
     [Fact]
     public async Task GetContractById_ContractFieldsAreValid()
     {
-        // Act
-        var response = await _client.GetAsync("/contracts/7");
-        var contract = await DeserializeContract(response);
+        var contract = await DeserializeContractAsync(await _client.GetAsync("/contracts/7"));
 
-        // Assert
-        contract!.ProjectName.Should().NotBeNullOrWhiteSpace();
+        contract.ProjectName.Should().NotBeNullOrWhiteSpace();
         contract.ClientCompany.Should().NotBeNullOrWhiteSpace();
         contract.ProjectManager.Should().NotBeNullOrWhiteSpace();
         contract.Budget.Should().BeGreaterThan(0);
@@ -168,23 +149,26 @@ public class GenerationServiceIntegrationTests : IAsyncLifetime
         contract.PlannedEndDate.Should().BeOnOrAfter(contract.StartDate);
     }
 
-    // ────────────────────────── Health checks ──────────────────────────
+    // ────────────────── Health ──────────────────
 
     [Fact]
-    public async Task HealthEndpoint_ShouldReturnHealthy()
+    public async Task HealthEndpoint_ShouldRespond()
     {
-        // Act
         var response = await _client.GetAsync("/health");
-
-        // Assert — 200 OK или 503 допустимы, но ответ должен прийти
         response.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.ServiceUnavailable);
     }
 
-    // ────────────────────────── Helpers ──────────────────────────
+    // ────────────────── Helper ──────────────────
 
-    private static async Task<SoftwareProjectContract?> DeserializeContract(HttpResponseMessage response)
+    /// <summary>
+    /// Десериализует контракт и бросает исключение если JSON невалидный,
+    /// избегая проблем с nullable-доступом к полям.
+    /// </summary>
+    private static async Task<SoftwareProjectContract> DeserializeContractAsync(HttpResponseMessage response)
     {
         var json = await response.Content.ReadAsStringAsync();
-        return JsonSerializer.Deserialize<SoftwareProjectContract>(json, JsonOptions);
+        var contract = JsonSerializer.Deserialize<SoftwareProjectContract>(json, _jsonOptions);
+        return contract ?? throw new InvalidOperationException(
+            $"Не удалось десериализовать контракт. Тело ответа: {json}");
     }
 }
