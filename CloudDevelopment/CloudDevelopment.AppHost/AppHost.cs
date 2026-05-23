@@ -25,10 +25,9 @@ var generationServices = ports
 
 var gateway = builder
     .AddProject<Projects.ApiGateway>("api-gateway")
-    // ApiGateway стартует только после того, как все реплики готовы
-    .WaitForCompletion(generationServices[0])
-    .WaitForCompletion(generationServices[1])
-    .WaitForCompletion(generationServices[2]);
+    .WaitFor(generationServices[0])
+    .WaitFor(generationServices[1])
+    .WaitFor(generationServices[2]);
 
 // Клиент стартует после того, как готов ApiGateway
 builder.AddProject<Projects.Client_Wasm>("client-wasm")

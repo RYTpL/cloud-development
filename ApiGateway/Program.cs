@@ -7,6 +7,8 @@ using Serilog.Formatting.Compact;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.AddServiceDefaults();
+
 builder.Host.UseSerilog((context, configuration) =>
     configuration
         .ReadFrom.Configuration(context.Configuration)
@@ -23,8 +25,8 @@ builder.Services.AddCors(options =>
             .WithOrigins(
                 "https://localhost:7282",
                 "http://localhost:5219")
-            .WithHeaders("Content-Type", "Authorization", "Accept")
-            .WithMethods("GET", "POST", "PUT", "DELETE");
+            .WithHeaders("Content-Type")
+            .WithMethods("GET");
     });
 });
 
