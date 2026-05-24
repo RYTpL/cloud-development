@@ -1,7 +1,10 @@
+using Amazon.SimpleNotificationService;
+using GenerationService.Options;
 using GenerationService.Services;
+using FileService.Services;
 using Serilog;
 using Serilog.Formatting.Compact;
-using GenerationService.Options;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,6 +24,20 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.Configure<CacheOptions>(
     builder.Configuration.GetSection("CacheOptions"));
+builder.Services.AddSingleton<IAmazonSimpleNotificationService>(_ =>
+{
+    var config = builder.Configuration;
+
+    return new AmazonSimpleNotificationServiceClient(
+        config["AWS:AccessKey"],
+        config["AWS:SecretKey"],
+        new AmazonSimpleNotificationServiceConfig
+        {
+            ServiceURL = config["AWS:ServiceURL"]
+        });
+});
+builder.Services.AddSingleton<SnsPublisherService>();
+builder.Services.AddHttpClient();
 
 var app = builder.Build();
 
@@ -43,12 +60,34 @@ app.MapGet("/contracts/{id:int}", async (
     return Results.Ok(contract);
 });
 
-app.MapGet("/contracts", (ContractGeneratorService generator) =>
+app.MapGet("/contracts", async (
+    ContractGeneratorService generator,
+    SnsPublisherService publisher,
+    IHttpClientFactory factory) =>
 {
     var contract = generator.Generate(Random.Shared.Next(1, 100000));
+
+    // publish в SNS
+    await publisher.PublishAsync(contract);
+
+    // отправка в FileService
+    var client = factory.CreateClient();
+
+    await client.PostAsJsonAsync(
+        "http://fileservice:8080/sns/contracts",
+        contract);
+
     return Results.Ok(contract);
 });
 
+app.MapPost("/sns/contracts", async (
+    JsonElement contract,
+    S3StorageService storage) =>
+{
+    await storage.SaveContractAsync(contract);
+
+    return Results.Ok();
+});
 app.MapDefaultEndpoints();
 
 app.Run();

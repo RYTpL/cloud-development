@@ -16,6 +16,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\..\FileService\FileService.csproj" />
 		<ProjectReference Include="..\..\GenerationService\GenerationService.csproj" />
 		<ProjectReference Include="..\..\Client.Wasm\Client.Wasm.csproj" />
 		<ProjectReference Include="..\..\ApiGateway\ApiGateway.csproj" />

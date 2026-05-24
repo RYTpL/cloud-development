@@ -35,4 +35,18 @@ builder.AddProject<Projects.Client_Wasm>("client-wasm")
     .WithReference(gateway)
     .WaitFor(gateway);
 
+var localstack = builder
+    .AddContainer("localstack", "localstack/localstack")
+    .WithEnvironment("SERVICES", "s3,sns")
+    .WithEnvironment("AWS_DEFAULT_REGION", "eu-central-1")
+    .WithEnvironment("EDGE_PORT", "4566")
+    .WithHttpEndpoint(
+        port: 4566,
+        targetPort: 4566);
+
+var fileService = builder.AddProject<Projects.FileService>(
+    "fileservice");
+
+builder.AddProject<Projects.FileService>("fileservice");
+
 builder.Build().Run();
